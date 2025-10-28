@@ -8,6 +8,7 @@ import os
 
 # LangChain + Google GenAI
 from langchain_community.vectorstores import Chroma
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -37,41 +38,32 @@ vector_db = Chroma(
 
 
 # ✅ System Prompt
-system_prompt='''
+system_prompt = """
 You are CyberGuard — an AI-powered Cybercrime Awareness Assistant designed to educate and assist Indian citizens in understanding cyber threats, prevention methods, and reporting procedures.
 
-Your knowledge base is built from official resources, including:
+Your knowledge base includes:
 - Cyber Security Awareness Booklet for Citizens (India)
 - Types of Cyber Crimes (India)
-- Cyber Security Tips by Cyber Crime Authorities
-- Types of Cyber Crimes and Prevention Measures
+- Cyber Security Tips by Indian Cybercrime Authorities
 
-Your responsibilities:
-1. Provide clear, simple, and accurate answers about cybercrime awareness, prevention, and safety.
-2. Reference relevant sections from the provided documents (metadata) when possible.
-3. Use an informative yet friendly tone — suitable for all citizens.
-4. If a query is outside the scope of cyber safety or Indian cyber law, politely decline and redirect users to appropriate authorities or helplines.
+Responsibilities:
+1. Provide clear, accurate answers about cybercrime awareness, prevention, and safety.
+2. Reference the relevant document when possible.
+3. Maintain a friendly, informative tone.
+4. If asked outside your scope, politely decline and guide users to official helplines.
 
-
-Never generate or infer sensitive or false information.
-Your goal is to educate and empower citizens to stay safe online.
-'''
+Never provide false or unsafe information.
+"""
 
 prompt = ChatPromptTemplate.from_messages([
     ("system", system_prompt),
-    ("human", "{query}")
+    ("human", "{context}\n\nUser Query: {query}")
 ])
 
-# Retrieve relevant text from vector DB
- retrieved_docs = vector_db.similarity_search("{query}",k=3)
-
 # ✅ Initialize LLM
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash",retriever=retrieved_docs, temperature=0.2)
+llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.2)
 parser = StrOutputParser()
 
-
-
-chain=prompt|llm|parser
 
 # ✅ Create FastAPI app
 app = FastAPI(title="CyberCrime Chatbot API")
@@ -82,11 +74,19 @@ class Query(BaseModel):
 
 
 @app.post("/chat")
-def chat_endpoint(query: Query):
-    # Step 1: Retrieve relevant text from vector DB
-    resulted_text=chain.invoke({"query": query.query})
-    return {"user_query": query.query, "bot_response": resulted_text}
+def chat_endpoint(request: Query):
+    retrieved_docs = vector_db.similarity_search(request.query, k=3)
+    if not retrieved_docs:
+        return {"error": "⚠️ No documents found in ChromaDB. Check your persist_directory path."}
 
+    context = "\n\n".join([doc.page_content for doc in retrieved_docs])
+    print("🧠 Context:", context[:300])  # Debug log
+
+    formatted_prompt = prompt.format_messages(context=context, query=request.query)
+    response = llm.invoke(formatted_prompt)
+    final_output = parser.invoke(response)
+
+    return {"user_query": request.query, "bot_response": final_output}
 
 @app.get("/")
 def root():
