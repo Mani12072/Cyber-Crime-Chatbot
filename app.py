@@ -59,13 +59,19 @@ Your goal is to educate and empower citizens to stay safe online.
 
 prompt = ChatPromptTemplate.from_messages([
     ("system", system_prompt),
-    ("human", "{context}\n\nUser Query: {query}")
+    ("human", "{query}")
 ])
 
+# Retrieve relevant text from vector DB
+ retrieved_docs = vector_db.similarity_search("{query}",k=3)
+
 # ✅ Initialize LLM
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.2)
+llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash",retriever=retrieved_docs, temperature=0.2)
 parser = StrOutputParser()
 
+
+
+chain=prompt|llm|parser
 
 # ✅ Create FastAPI app
 app = FastAPI(title="CyberCrime Chatbot API")
@@ -76,17 +82,10 @@ class Query(BaseModel):
 
 
 @app.post("/chat")
-def chat_endpoint(request: Query):
+def chat_endpoint(query: Query):
     # Step 1: Retrieve relevant text from vector DB
-    retrieved_docs = vector_db.similarity_search(request.query, k=3)
-    context = "\n\n".join([doc.page_content for doc in retrieved_docs])
-
-    # Step 2: Generate response
-    final_prompt = prompt.format(context=context, query=request.query)
-    response = llm.invoke(final_prompt)
-    final_output = parser.parse(response.content)
-
-    return {"user_query": request.query, "bot_response": final_output}
+    resulted_text=chain.invoke({"query": query.query})
+    return {"user_query": query.query, "bot_response": resulted_text}
 
 
 @app.get("/")
