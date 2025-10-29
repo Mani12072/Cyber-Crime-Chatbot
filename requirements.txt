@@ -4,5 +4,6 @@ langchain
 langchain-community
 langchain-core
 langchain-google-genai
+sentence-transformers
 chromadb
 pydantic
