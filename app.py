@@ -34,7 +34,7 @@ PERSIST_DIR = "cyber_crimedb1"
 
 vector_db = Chroma(
     persist_directory=PERSIST_DIR,
-    embedding_function = HuggingFaceEmbeddings(model_name="all-MiniLM-L12-v2"),
+    embedding_function = HuggingFaceEmbeddings(model_name="paraphrase-MiniLM-L3-v2"),
     collection_name="cyber_crime1"
 )
 
